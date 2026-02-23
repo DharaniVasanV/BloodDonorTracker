@@ -29,10 +29,6 @@ except Exception as e:
     print(f"❌ Firebase initialization failed: {e}")
     db = None
 
-# ----------------------------
-# In-memory storage for dashboard (optional, improves refresh speed)
-# ----------------------------
-device_data = {}
 
 # ----------------------------
 # Dashboard HTML template
@@ -261,7 +257,6 @@ def save_info():
 # ----------------------------
 @app.route("/update_location", methods=["POST"])
 def update_location():
-    global device_data
     data = request.form if request.form else request.get_json(silent=True) or {}
     phone = data.get("phone")
     if not phone:
@@ -273,33 +268,13 @@ def update_location():
     except (TypeError, ValueError):
         return jsonify({"status":"error","message":"Invalid latitude/longitude"}), 400
 
-    # Update in-memory cache
-    # Fetch existing donor info to get name if not provided
-    name = data.get("name")
-    if not name and db:
-        try:
-            donor_doc = db.collection("DonorInfo").document(phone).get()
-            if donor_doc.exists:
-                d_data = donor_doc.to_dict()
-                fname = d_data.get("fName", "")
-                lname = d_data.get("lName", "")
-                name = d_data.get("fullName") or f"{fname} {lname}".strip()
-        except Exception as e:
-            print(f"⚠ Error fetching donor name: {e}")
-
-    device_data[phone] = {
-        "lat": lat,
-        "lon": lon,
-        "emergency": data.get("emergency"),
-        "name": name or "Unknown"
-    }
-
-    # Update Firestore, merge so personal info remains
+    # Update Firestore, merge so personal info remains, but lat/lon overwrite
     try:
         db.collection("DonorInfo").document(phone).set({
             "lat": lat,
             "lon": lon,
-            "emergency": data.get("emergency")
+            "emergency": data.get("emergency"),
+            "timestamp": str(datetime.datetime.now())
         }, merge=True)
     except Exception as e:
         return jsonify({"status":"error","message": str(e)}), 500
@@ -322,16 +297,6 @@ def receive_sms():
     except (TypeError, ValueError):
         return {"status": "error", "message": "Invalid latitude/longitude"}, 400
 
-    # Update in-memory cache
-    device_data[phone] = device_data.get(phone, {})
-    device_data[phone].update({
-        "lat": lat,
-        "lon": lon,
-        "name": data.get("name"),
-        "emergency": data.get("emergency"),
-        "message": data.get("message")
-    })
-
     # Update Firestore and merge with existing document
     try:
         db.collection("DonorInfo").document(phone).set({
@@ -339,7 +304,8 @@ def receive_sms():
             "lon": lon,
             "name": data.get("name"),
             "emergency": data.get("emergency"),
-            "last_message": data.get("message")
+            "last_message": data.get("message"),
+            "timestamp": str(datetime.datetime.now())
         }, merge=True)
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
@@ -373,17 +339,7 @@ def latest_data():
         except Exception as e:
             print(f"⚠ Error fetching from Firebase: {e}")
 
-    # 2️⃣ Merge with in-memory device_data safely
-    for phone, data in device_data.items():
-        if phone in all_data:
-            # Update only fields that exist (avoid overwriting Firebase name with None)
-            for k, v in data.items():
-                if v is not None:
-                    all_data[phone][k] = v
-        else:
-            # Add new SMS-only data
-            all_data[phone] = {k: v for k, v in data.items() if v is not None}
-
+    # 2️⃣ Return the Firestore data
     return jsonify(all_data)
 
 # ----------------------------
