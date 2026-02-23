@@ -1,1 +1,6 @@
 serviceAccountKey.json
+*.json
+!requirements.txt
+node_modules/
+__pycache__/
+.env

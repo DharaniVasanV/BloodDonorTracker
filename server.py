@@ -3,23 +3,25 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 import datetime
+import json
 
 app = Flask(__name__)
 
 # ----------------------------
-# Firestore Initialization
+# Firestore Initialization (via environment variable)
 # ----------------------------
-FIREBASE_KEY_PATH = os.path.join(os.getcwd(), "serviceAccountKey.json")
+service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 
 try:
     if not firebase_admin._apps:
-        if os.path.exists(FIREBASE_KEY_PATH):
-            cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        if service_account_json:
+            cred_dict = json.loads(service_account_json)
+            cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             db = firestore.client()
             print("✅ Connected to Firestore successfully!")
         else:
-            print(f"❌ Service account key not found at: {FIREBASE_KEY_PATH}")
+            print("❌ FIREBASE_SERVICE_ACCOUNT_JSON not set")
             db = None
     else:
         db = firestore.client()
@@ -33,7 +35,7 @@ except Exception as e:
 device_data = {}
 
 # ----------------------------
-# Dashboard HTML template (same as your previous template)
+# Dashboard HTML template
 # ----------------------------
 HTML_TEMPLATE = """ 
 <!DOCTYPE html>
@@ -254,6 +256,7 @@ def save_info():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 # ----------------------------
 # Endpoint: Update location info (merge with existing personal info)
 # ----------------------------
@@ -294,7 +297,6 @@ def update_location():
 # ----------------------------
 # Optional: Receive SMS updates (merge location/personal info)
 # ----------------------------
-
 @app.route("/receive_sms", methods=["POST"])
 def receive_sms():
     data = request.get_json()
@@ -333,12 +335,12 @@ def receive_sms():
     return {"status": "success"}
 
 # ----------------------------
-# Endpoint: Get latest in-memory data for dashboard
+# Endpoint: Get latest in-memory + Firestore data for dashboard
 # ----------------------------
 @app.route("/latest_data")
 def latest_data():
     all_data = {}
-    
+
     # 1️⃣ Load data from Firebase
     if db:
         try:
@@ -346,7 +348,7 @@ def latest_data():
             for doc in docs:
                 doc_data = doc.to_dict()
                 phone = doc.id
-                
+
                 all_data[phone] = {
                     'name': f"{doc_data.get('FirstName', '')} {doc_data.get('LastName', '')}".strip(),
                     'phone': doc_data.get('PhoneNumber', phone),
@@ -361,7 +363,7 @@ def latest_data():
             print(f"📱 Loaded {len(all_data)} users from Firebase")
         except Exception as e:
             print(f"⚠ Error fetching from Firebase: {e}")
-    
+
     # 2️⃣ Merge with in-memory device_data safely
     for phone, data in device_data.items():
         if phone in all_data:
@@ -372,7 +374,7 @@ def latest_data():
         else:
             # Add new SMS-only data
             all_data[phone] = {k: v for k, v in data.items() if v is not None}
-    
+
     return jsonify(all_data)
 
 # ----------------------------
@@ -391,22 +393,20 @@ def health():
     firebase_status = "connected" if db else "disconnected"
     try:
         if db:
-  
             test_collection = db.collection("TouristInfo")
             count = len(list(test_collection.limit(1).stream()))
-            firebase_details = f"✅ Firebase connected - TouristInfo collection accessible"
+            firebase_details = "✅ Firebase connected - TouristInfo collection accessible"
         else:
-            firebase_details = "❌ Firebase not connected - check service account key"
+            firebase_details = "❌ Firebase not connected - check FIREBASE_SERVICE_ACCOUNT_JSON"
     except Exception as e:
         firebase_details = f"⚠ Firebase error: {str(e)}"
-    
+
     return {
         "status": "ok",
         "firebase": firebase_status,
-        "details": firebase_details,
-        "service_account_path": FIREBASE_KEY_PATH,
-        "file_exists": os.path.exists(FIREBASE_KEY_PATH)
+        "details": firebase_details
     }
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Local dev; Render will ignore this and use gunicorn
+    app.run(host="0.0.0.0", port=5000, debug=False)
