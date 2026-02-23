@@ -268,9 +268,9 @@ def update_location():
     except (TypeError, ValueError):
         return jsonify({"status":"error","message":"Invalid latitude/longitude"}), 400
 
-    # Update Firestore, merge so personal info remains, but lat/lon overwrite
+    # Update DonorLocation collection (tracking only)
     try:
-        db.collection("DonorInfo").document(phone).set({
+        db.collection("DonorLocation").document(phone).set({
             "lat": lat,
             "lon": lon,
             "emergency": data.get("emergency"),
@@ -297,12 +297,11 @@ def receive_sms():
     except (TypeError, ValueError):
         return {"status": "error", "message": "Invalid latitude/longitude"}, 400
 
-    # Update Firestore and merge with existing document
+    # Update DonorLocation collection (tracking only)
     try:
-        db.collection("DonorInfo").document(phone).set({
+        db.collection("DonorLocation").document(phone).set({
             "lat": lat,
             "lon": lon,
-            "name": data.get("name"),
             "emergency": data.get("emergency"),
             "last_message": data.get("message"),
             "timestamp": str(datetime.datetime.now())
@@ -319,25 +318,41 @@ def receive_sms():
 def latest_data():
     all_data = {}
 
-    # 1️⃣ Load data from Firebase
+    # 1️⃣ Load location tracking data from DonorLocation
     if db:
         try:
-            docs = db.collection("DonorInfo").stream()
-            for doc in docs:
-                doc_data = doc.to_dict()
+            # First, fetch all active locations
+            loc_docs = db.collection("DonorLocation").stream()
+            for doc in loc_docs:
+                loc_data = doc.to_dict()
                 phone = doc.id
-
+                
+                # Default data from tracking
                 all_data[phone] = {
-                    'name': doc_data.get('fullName') or f"{doc_data.get('fName', '')} {doc_data.get('lName', '')}".strip() or doc_data.get('name', 'Unknown'),
-                    'phone': doc_data.get('phone', phone),
-                    'lat': doc_data.get('lat', 0),
-                    'lon': doc_data.get('lon', 0),
-                    'emergency': doc_data.get('emergency', False),
-                    'timestamp': doc_data.get('timestamp', str(datetime.datetime.now()))
+                    'name': 'Unknown',
+                    'phone': phone,
+                    'lat': loc_data.get('lat', 0),
+                    'lon': loc_data.get('lon', 0),
+                    'emergency': loc_data.get('emergency', False),
+                    'timestamp': loc_data.get('timestamp', '')
                 }
-            print(f"📱 Loaded {len(all_data)} users from Firebase")
+
+                # Attempt to fetch profile details from DonorInfo
+                try:
+                    info_doc = db.collection("DonorInfo").document(phone).get()
+                    if info_doc.exists:
+                        info_data = info_doc.to_dict()
+                        fname = info_data.get("fName", "")
+                        lname = info_data.get("lName", "")
+                        fullname = info_data.get("fullName") or f"{fname} {lname}".strip()
+                        if fullname:
+                            all_data[phone]['name'] = fullname
+                except Exception as e:
+                    print(f"⚠ Error fetching profile for {phone}: {e}")
+
+            print(f"📱 Loaded {len(all_data)} users from Tracking")
         except Exception as e:
-            print(f"⚠ Error fetching from Firebase: {e}")
+            print(f"⚠ Error fetching from Tracking: {e}")
 
     # 2️⃣ Return the Firestore data
     return jsonify(all_data)
