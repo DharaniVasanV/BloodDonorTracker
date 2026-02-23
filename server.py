@@ -43,7 +43,7 @@ HTML_TEMPLATE = """
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tourist Safety Dashboard</title>
+<title>Blood Donor Tracker</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -79,9 +79,9 @@ body { margin:0; font-family: Roboto, system-ui, -apple-system, Segoe UI, Arial,
 <div>
 <div style="display:flex; align-items:center; gap:8px">
 <i class="fa-solid fa-location-dot" style="color:var(--primary)"></i>
-<h2 style="margin:0">Tourist Safety Dashboard</h2>
+<h2 style="margin:0">Blood Donor Tracker</h2>
 </div>
-<div class="subtitle">Real-time monitoring of tourist locations and safety</div>
+<div class="subtitle">Real-time monitoring of blood donors and availability</div>
 </div>
 <div class="controls">
 <button id="themeBtn" class="btn secondary" title="Toggle theme"><i class="fa-solid fa-moon"></i></button>
@@ -243,7 +243,7 @@ def save_info():
         doc_id = phone
 
         # Save to Firestore
-        db.collection("TouristInfo").document(doc_id).set({
+        db.collection("DonorInfo").document(doc_id).set({
             "FirstName": first_name,
             "LastName": last_name,
             "DateOfBirth": dob,
@@ -284,7 +284,7 @@ def update_location():
 
     # Update Firestore, merge so personal info remains
     try:
-        db.collection("TouristInfo").document(phone).set({
+        db.collection("DonorInfo").document(phone).set({
             "lat": lat,
             "lon": lon,
             "emergency": data.get("emergency")
@@ -322,7 +322,7 @@ def receive_sms():
 
     # Update Firestore and merge with existing document
     try:
-        db.collection("TouristInfo").document(phone).set({
+        db.collection("DonorInfo").document(phone).set({
             "lat": lat,
             "lon": lon,
             "name": data.get("name"),
@@ -344,7 +344,7 @@ def latest_data():
     # 1️⃣ Load data from Firebase
     if db:
         try:
-            docs = db.collection("TouristInfo").stream()
+            docs = db.collection("DonorInfo").stream()
             for doc in docs:
                 doc_data = doc.to_dict()
                 phone = doc.id
@@ -393,9 +393,9 @@ def health():
     firebase_status = "connected" if db else "disconnected"
     try:
         if db:
-            test_collection = db.collection("TouristInfo")
+            test_collection = db.collection("DonorInfo")
             count = len(list(test_collection.limit(1).stream()))
-            firebase_details = "✅ Firebase connected - TouristInfo collection accessible"
+            firebase_details = f"✅ Firebase connected - DonorInfo collection accessible"
         else:
             firebase_details = "❌ Firebase not connected - check FIREBASE_SERVICE_ACCOUNT_JSON"
     except Exception as e:
