@@ -103,7 +103,7 @@ body { margin:0; font-family: Roboto, system-ui, -apple-system, Segoe UI, Arial,
 </div>
 <div class="search">
 <i class="fa-solid fa-magnifying-glass" style="color:var(--muted)"></i>
-<input id="searchInput" placeholder="Search by name, phone, address or emergency"/>
+<input id="searchInput" placeholder="Search by name, phone or emergency"/>
 <button id="clearSearch" class="btn secondary" title="Clear"><i class="fa-solid fa-eraser"></i></button>
 <button id="fitBtn" class="btn secondary" title="Fit markers"><i class="fa-solid fa-location-crosshairs"></i></button>
 </div>
@@ -156,13 +156,13 @@ function render(){
     let shown=0;
     for(const phone of phones){
         const u = dataCache[phone]||{};
-        const blob = `${u.name||''} ${phone} ${u.address||''} ${u.emergency||''}`.toLowerCase();
+        const blob = `${u.name||''} ${phone} ${u.emergency||''}`.toLowerCase();
         if(term && !blob.includes(term)) continue;
         shown++;
         const lat = toNum(u.lat,20.5937), lon = toNum(u.lon,78.9629);
         if(!markers[phone]){
             const m = L.marker([lat,lon]).addTo(map);
-            m.bindPopup(`<b>${u.name||'Unknown'}</b><br/>📱 ${phone}<br/>${u.address||''}`);
+            m.bindPopup(`<b>${u.name||'Unknown'}</b><br/>📱 ${phone}`);
             markers[phone]=m;
         } else { markers[phone].setLatLng([lat,lon]); }
         html+=`
@@ -172,10 +172,8 @@ function render(){
                 <div style="flex:1">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
                         <div style="font-weight:600">${u.name||'Unknown'}</div>
-                        <span class="pill">${u.gender||'-'}</span>
                     </div>
                     <div class="meta">📱 ${phone}</div>
-                    <div class="meta">📍 ${u.address||'-'}</div>
                 </div>
             </div>
             <div class="meta" style="margin-top:8px">Lat/Lon: ${u.lat??'-'}, ${u.lon??'-'}</div>
@@ -242,14 +240,15 @@ def save_info():
         # Use phone number as document ID
         doc_id = phone
 
-        # Save to Firestore
+        # Save to Firestore (store all fields)
         db.collection("DonorInfo").document(doc_id).set({
-            "FirstName": first_name,
-            "LastName": last_name,
-            "DateOfBirth": dob,
-            "Gender": gender,
-            "PhoneNumber": phone,
-            "Address": address
+            "fName": data.get("firstName"),
+            "lName": data.get("lastName"),
+            "fullName": data.get("fullName"),
+            "dob": data.get("dob"),
+            "gender": data.get("gender"),
+            "phone": phone,
+            "address": data.get("address")
         })
 
         return jsonify({"status": "success", "message": "Personal info saved"})
@@ -275,11 +274,24 @@ def update_location():
         return jsonify({"status":"error","message":"Invalid latitude/longitude"}), 400
 
     # Update in-memory cache
+    # Fetch existing donor info to get name if not provided
+    name = data.get("name")
+    if not name and db:
+        try:
+            donor_doc = db.collection("DonorInfo").document(phone).get()
+            if donor_doc.exists:
+                d_data = donor_doc.to_dict()
+                fname = d_data.get("fName", "")
+                lname = d_data.get("lName", "")
+                name = d_data.get("fullName") or f"{fname} {lname}".strip()
+        except Exception as e:
+            print(f"⚠ Error fetching donor name: {e}")
+
     device_data[phone] = {
         "lat": lat,
         "lon": lon,
         "emergency": data.get("emergency"),
-        "name": data.get("name")  # optional
+        "name": name or "Unknown"
     }
 
     # Update Firestore, merge so personal info remains
@@ -350,13 +362,10 @@ def latest_data():
                 phone = doc.id
 
                 all_data[phone] = {
-                    'name': f"{doc_data.get('FirstName', '')} {doc_data.get('LastName', '')}".strip(),
-                    'phone': doc_data.get('PhoneNumber', phone),
-                    'address': doc_data.get('Address', ''),
+                    'name': doc_data.get('fullName') or f"{doc_data.get('fName', '')} {doc_data.get('lName', '')}".strip() or doc_data.get('name', 'Unknown'),
+                    'phone': doc_data.get('phone', phone),
                     'lat': doc_data.get('lat', 0),
                     'lon': doc_data.get('lon', 0),
-                    'gender': doc_data.get('Gender', ''),
-                    'dob': doc_data.get('DateOfBirth', ''),
                     'emergency': doc_data.get('emergency', False),
                     'timestamp': doc_data.get('timestamp', str(datetime.datetime.now()))
                 }
