@@ -1,3 +1,6 @@
 flask
 gunicorn
 firebase-admin
+PyJWT
+bcrypt
+python-dotenv
