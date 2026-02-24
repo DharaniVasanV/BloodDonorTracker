@@ -1,10 +1,19 @@
 from flask import Flask, render_template_string, jsonify
+import os
+import sys
+
+# Force unbuffered output for Render logs
+sys.stdout.reconfigure(line_buffering=True)
+print("🚀 [STARTUP] app.py execution started", flush=True)
+
 from firebase_config import db
+print("🚀 [STARTUP] firebase_config imported", flush=True)
+
 from auth import auth_bp
 from blood_requests import requests_bp
 from hospitals import hospitals_bp
 from donors import donors_bp
-import os
+print("🚀 [STARTUP] Blueprints imported", flush=True)
 
 app = Flask(__name__)
 
