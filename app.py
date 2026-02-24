@@ -833,6 +833,11 @@ def not_found(e):
 def server_error(e):
     return jsonify({"message": "Internal server error", "error": str(e)}), 500
 
+print("🔍 Diagnostic: app.py loaded successfully.")
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Diagnostic: Starting manual server on port {port}...")
     app.run(host="0.0.0.0", port=port, debug=True)
+else:
+    print("🚀 Diagnostic: app.py detected it is NOT being run as main (Gunicorn/WSGI mode).")
